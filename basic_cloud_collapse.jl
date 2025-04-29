@@ -95,7 +95,7 @@ function update_density!(ρ::AbstractVector, v::AbstractVector, r::AbstractVecto
 
     # Update interior points (i=2..N-1)
     @inbounds for i in 2:N-1
-        ρ_new[i-1] = ρ[i] - (Δt/(2Δr)) * (1/r[i]^2) * (f[i+1] - f[i-1])
+        ρ_new[i-1] = ρ[i-1] - (Δt/(2Δr)) * (1/r[i]^2) * (f[i+1] - f[i-1])
     end
 
     return ρ_new
@@ -120,62 +120,80 @@ end
 
 time = [0.0,]
 
-for step in 1:250
-    # recompute CFL dt, but guard zero-velocity
-    push!(time, dt)
-    total_time = sum(time)
-    
-    vmax = maximum(abs.(velocity))
-    if vmax > 0
-      global dt = 0.5 * dr /  vmax
-    end
-  
-  
-    # update density and velocity
-    global rho      .= update_density!(rho, velocity, r, dt, dr)
-    global velocity .= update_velocity!(velocity, grav_accel, dt, dr)
-    
-    iters = length(rho)
-    for i in 1:iters
-        if rho[i] < 0.0
-            rho[i] = 0.0
+using HDF5, Plots
+
+function evolve_collapse(rho0, velocity0, r, dr, G;
+                         steps=800, save_every=10, output_file="collapse_data.h5")
+
+    zones = length(r)
+    rho = copy(rho0)
+    velocity = copy(velocity0)
+
+    A, c = build_spherical_tridiagonal_matrix(zones, dr)
+    rhs = make_rhs(zones, rho, G, c[end]; Φ_out=0.0)
+    gravity = A \ rhs
+    grav_accel = vcat(0.0, -diff(gravity))
+
+    t_ff = sqrt(3π/(32 * G * maximum(rho)))
+    time = [0.0]
+    dt = 0.5 * dr / maximum(abs.(velocity))
+
+    h5file = h5open(output_file, "w")
+
+    # store some metadata
+    h5file["/metadata/t_ff"] = t_ff
+    h5file["/metadata/initial_dt"] = dt
+
+    for step in 1:steps
+        push!(time, dt)
+        total_time = sum(time)
+
+        vmax = maximum(abs.(velocity))
+        if vmax > 0
+            dt = 0.5 * dr / vmax
+        end
+
+        rho .= update_density!(rho, velocity, r, dt, dr)
+        velocity .= update_velocity!(velocity, grav_accel, dt, dr)
+        rho_iters = length(rho)
+        for i in 1:rho_iters
+            if rho[i] < 0.0
+                rho[i] = 0.0
+            end
+        end
+
+        A, c = build_spherical_tridiagonal_matrix(zones, dr)
+        rhs = make_rhs(zones, rho, G, c[end]; Φ_out=0.0)
+        gravity = A \ rhs
+        grav_accel = vcat(0.0, -diff(gravity))
+
+        # save every `save_every` steps
+        if step % save_every == 0
+            groupname = "/snapshots/step_$(step)"
+            g = create_group(h5file, groupname)
+
+            g["radius"] = r
+            g["density"] = rho
+            g["velocity"] = velocity
+            g["gravity"] = gravity
+            g["grav_accel"] = grav_accel
+            g["time"] = total_time
+            g["dt"] = dt
+
+            close(g)
+        end
+
+        # (optional) print progress
+        if step % 100 == 0
+            println("Step $step: max(ρ) = ", round(maximum(rho), digits=5), 
+                    ", dt = ", round(dt, sigdigits=3),
+                    ", total time = ", round(total_time, sigdigits=4))
         end
     end
-    # recompute gravity
-    global A, c    = build_spherical_tridiagonal_matrix(zones, dr)
-    global rhs     = make_rhs(zones, rho, G, c[end]; Φ_out=0.0)
-    global gravity = A \ rhs
-    global grav_accel = vcat(0.0, -diff(gravity))
-  
-    # (optionally print progress)
-    if step % 100 == 0
-        println(" step=", step,
-              "  maxρ=", round(maximum(rho), digits=4),
-              "  dt=", round(dt, sigdigits=3))
-        println("The total time passed in the simulation is: $(total_time)")
-    end
-  end
 
+    close(h5file)
 
-using Plots
+    println("Simulation complete. Data saved to: $output_file")
+end
 
-
-
-
-
-plot(r, velocity ./ maximum(abs.(velocity)))
-savefig("velocity_plot.pdf")
-
-
-plot(r, gravity, xlabel="r", ylabel="Gravitational Potential", label="Gravitational Potential")
-savefig("gravity_plot.pdf")
-
-plot(r, grav_accel)
-savefig("grav_accel.pdf")
-
-plot(r, rho, label="Evolved Density")
-savefig("evolved_density.pdf")
-
-plot(r, mass ./ maximum(mass))
-plot!(r, dM ./ maximum(dM))
-savefig("mass_plot.pdf")
+evolve_collapse(rho, velocity, r, dr, G, steps=800, save_every=10, output_file="collapse_run.h5")
