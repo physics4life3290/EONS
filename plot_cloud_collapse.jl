@@ -25,15 +25,39 @@ function load_snapshots(h5_filename::String)
 end
 
 function plot_snapshots(snapshots::Dict{Int, Dict}, field::String;
-                        every::Int=1, title_prefix="")
+                        every::Int=1, title_prefix="",
+                        log_scale_x::Bool=false, log_scale_y::Bool=false,
+                        xlims::Tuple{Float64, Float64}=(nothing, nothing))
+
     steps = sort(collect(keys(snapshots)))
     plt = plot(title="$title_prefix $field", xlabel="Radius (cm)", ylabel=field)
+    
     for (i, step) in enumerate(steps)
         if i % every == 0
             snap = snapshots[step]
-            plot!(plt, snap["radius"], snap[field], label="t=$(round(snap["time"], sigdigits=3))s")
+            x_data = snap["radius"]
+            y_data = snap[field]
+            
+            # Apply log scale to the x-axis (radius)
+            if log_scale_x
+                x_data = log10.(x_data .+ 1e-10)  # Adding a small value to avoid log(0)
+            end
+            
+            # Apply log scale to the y-axis (density, velocity, etc.)
+            if log_scale_y && field == "density"
+                y_data = log10.(y_data .+ 1e-10)  # Adding a small value to avoid log(0)
+            end
+
+            plot!(plt, x_data, y_data, label="t=$(round(snap["time"], sigdigits=3))s")
         end
     end
+    
+    # Set xlims if specified
+    if xlims != (nothing, nothing)
+        xlims!(plt, xlims)
+    end
+
+
     return plt
 end
 
@@ -41,14 +65,14 @@ end
 h5_filename = "collapse_run.h5"
 snapshots = load_snapshots(h5_filename)
 
-# Plot snapshots for different quantities
-p1 = plot_snapshots(snapshots, "density", every=3, title_prefix="Collapse:")
-p2 = plot_snapshots(snapshots, "velocity", every=3, title_prefix="Collapse:")
-p3 = plot_snapshots(snapshots, "gravity", every=3, title_prefix="Collapse:")
-p4 = plot_snapshots(snapshots, "grav_accel", every=3, title_prefix="Collapse:")
+# Plot snapshots for different quantities with custom xlims
+p1 = plot_snapshots(snapshots, "density", every=7, title_prefix="Collapse:", log_scale_x=true, log_scale_y=true, xlims=(1.0, 11.0))
+p2 = plot_snapshots(snapshots, "velocity", every=7, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p3 = plot_snapshots(snapshots, "gravity", every=7, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p4 = plot_snapshots(snapshots, "grav_accel", every=7, title_prefix="Collapse:", xlims=(0.0, R_sun))
 
 # Display the plots
 #plot(p1)
 #plot(p2)
-#plot(p3)
-plot(p4)
+plot(p3)
+#plot(p4)
