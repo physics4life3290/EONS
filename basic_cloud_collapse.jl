@@ -2,14 +2,40 @@
 
 
 
+
+include("Lane_Emden.jl")
+include("interp_test.jl")
+
 R_sun = 6.957E10 # solar radius in cm
 R = R_sun
 G = 6.674E-8 # Gravitational constant in cm^3/g/s^2
 zones = 1000
+ang_zones = 10
 rho_c = 5.7
-r = collect(range(0, R, zones))
+α=1.0
+n = 5/3
+
+# Next we collect the density profile from the Lane Emden solution.
+ξ_vals, θ_vals, _ = lane_emden(n, 10.0, 1E-3)
+ξ_vals = ξ_vals ./ maximum(ξ_vals)
+radius = α .* ξ_vals .* R 
+dens = rho_c .* θ_vals .^ n
+
+# We prepare for interpolation to lower-res grid.
+dens_interp = cubic_spline(radius, dens)
+
+# Grid
+r = range(0, R, length=zones)
 dr = r[2] - r[1]
-rho = rho_c .* (1 .- (r ./ R) .^ 2)
+rho = zeros(zones)
+
+# Variables
+for i in 1:zones
+    rho[i] = dens_interp(r[i])
+    if rho[i] < 0.0
+        rho[i] = 0.0
+    end    
+end
 
 mass_iters = length(r)
 mass = zeros(mass_iters)
@@ -123,7 +149,7 @@ time = [0.0,]
 using HDF5, Plots
 
 function evolve_collapse(rho0, velocity0, r, dr, G;
-                         steps=800, save_every=10, output_file="collapse_data.h5")
+                         steps=300, save_every=10, output_file="collapse_data.h5")
 
     zones = length(r)
     rho = copy(rho0)
@@ -144,7 +170,10 @@ function evolve_collapse(rho0, velocity0, r, dr, G;
     h5file["/metadata/t_ff"] = t_ff
     h5file["/metadata/initial_dt"] = dt
 
+    step = 0.0
     for step in 1:steps
+    #while sum(time) < t_ff
+        #step += 1.0
         push!(time, dt)
         total_time = sum(time)
 
@@ -172,7 +201,7 @@ function evolve_collapse(rho0, velocity0, r, dr, G;
             groupname = "/snapshots/step_$(step)"
             g = create_group(h5file, groupname)
 
-            g["radius"] = r
+            g["radius"] = collect(r)
             g["density"] = rho
             g["velocity"] = velocity
             g["gravity"] = gravity
@@ -196,4 +225,4 @@ function evolve_collapse(rho0, velocity0, r, dr, G;
     println("Simulation complete. Data saved to: $output_file")
 end
 
-evolve_collapse(rho, velocity, r, dr, G, steps=800, save_every=10, output_file="collapse_run.h5")
+evolve_collapse(rho, velocity, r, dr, G, steps=250, save_every=10, output_file="collapse_run.h5")
