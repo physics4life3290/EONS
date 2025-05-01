@@ -66,13 +66,13 @@ h5_filename = "collapse_run.h5"
 snapshots = load_snapshots(h5_filename)
 
 # Plot snapshots for different quantities with custom xlims
-p1 = plot_snapshots(snapshots, "density", every=7, title_prefix="Collapse:", log_scale_x=true, log_scale_y=true, xlims=(1.0, 11.0))
-p2 = plot_snapshots(snapshots, "velocity", every=7, title_prefix="Collapse:", xlims=(0.0, R_sun))
-p3 = plot_snapshots(snapshots, "gravity", every=7, title_prefix="Collapse:", xlims=(0.0, R_sun))
-p4 = plot_snapshots(snapshots, "grav_accel", every=7, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p1 = plot_snapshots(snapshots, "density", every=20, title_prefix="Collapse:", log_scale_x=true, log_scale_y=true, xlims=(1.0, 11.0))
+p2 = plot_snapshots(snapshots, "velocity", every=20, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p3 = plot_snapshots(snapshots, "gravity", every=20, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p4 = plot_snapshots(snapshots, "grav_accel", every=20, title_prefix="Collapse:", xlims=(0.0, R_sun))
 
 # Display the plots
-#plot(p1)
+plot(p1)
 #plot(p2)
-plot(p3)
+#plot(p3)
 #plot(p4)
