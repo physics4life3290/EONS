@@ -10,11 +10,12 @@
 
 
 
-include("lane_emden.jl")
-include("../ARC/Numerical_Methods/interpolation/interpolate.jl")
-include("../ARC/Numerical_Methods/integration/methods/spatial/gaussian_quadrature.jl")
-include("Linear_Algebra/construct_tridiagonal_matrix.jl")
-include("Linear_Algebra/spherical_poisson_coefficients.jl")
+include("../lane_emden.jl")
+include("../../ARC/Numerical_Methods/interpolation/interpolate.jl")
+include("../../ARC/Numerical_Methods/integration/methods/spatial/gaussian_quadrature.jl")
+include("../Linear_Algebra/construct_tridiagonal_matrix.jl")
+include("../Linear_Algebra/spherical_poisson_coefficients.jl")
+
 using HDF5, Plots
 
 function get_initial_density(n, M, zones, interp_config)
