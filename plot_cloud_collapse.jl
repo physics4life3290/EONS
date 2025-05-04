@@ -79,7 +79,7 @@ p3 = plot_snapshots(snapshots, "gravity", every=10, title_prefix="Collapse:", xl
 p4 = plot_snapshots(snapshots, "grav_accel", every=10, title_prefix="Collapse:", xlims=(0.0, R_sun))
 
 # Display the plots
-#plot(p1)
-plot(p2)
+plot(p1)
+#plot(p2)
 #plot(p3)
 #plot(p4)

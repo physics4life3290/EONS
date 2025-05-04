@@ -95,10 +95,15 @@ function create_initial_grid(n, M, zones, interp_config)
     velocity = get_initial_velocity(mass, r)
     gravity, grav_accel = get_gravity(zones, dr, rho)
     
-    pressure = rho .* k_B .* T /(mu .* m_p)
+    ideal_pressure = rho .* k_B .* T /(mu .* m_p)
+    rad_pressure = zeros(length(ideal_pressure))
+    rad_pressure .= rad_cnst * T^4 / 3
+    degen_pressure = 1E13 .* (rho ./ 1E6).^(5/3)
+    total_pressure = ideal_pressure .+ rad_pressure .+ degen_pressure
+
     t_ff, dt = get_time_params(rho, velocity, dr)
 
-    return r, dr, rho, mass, dM, pressure, velocity, gravity, grav_accel, t_ff, dt
+    return r, dr, rho, mass, dM, total_pressure, velocity, gravity, grav_accel, t_ff, dt
 end
 
 function update_density!(ρ::AbstractVector, v::AbstractVector, r::AbstractVector,
@@ -151,6 +156,8 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, pressure0, r, d
     gravity = copy(gravity0)
     grav_accel = copy(grav_accel0)
     P = copy(pressure0)
+    Ideal_P = zeros(zones)
+    Rad_P = zeros(zones)
 
     h5file = h5open(output_file, "w")
 
@@ -178,7 +185,10 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, pressure0, r, d
             end
         end
 
-        P = rho .* k_B  .* T ./ (mu .* m_p)
+        Ideal_P = rho .* k_B  .* T ./ (mu .* m_p)
+        Rad_P .= rad_cnst * T^4 / 3
+        Degen_P = 1E13 .* (rho ./ 1E6).^(5/3)
+        Total_P = Ideal_P .+ Rad_P
 
         A, c = build_spherical_poisson_matrix(zones, dr)
         rhs = get_gravity_rhs(zones, rho, c[end]; Φ_out=0.0)
@@ -186,7 +196,7 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, pressure0, r, d
         gravity = A \ rhs
         grav_accel = vcat(0.0, -diff(gravity))
         
-        velocity .= update_velocity!(velocity, grav_accel, rho, P, dt, dr)
+        velocity .= update_velocity!(velocity, grav_accel, rho, Total_P, dt, dr)
     
     
     
@@ -197,7 +207,7 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, pressure0, r, d
 
             g["radius"] = collect(r)
             g["density"] = rho
-            g["pressure"] = P
+            g["pressure"] = Total_P
             g["velocity"] = velocity
             g["gravity"] = gravity
             g["grav_accel"] = grav_accel
@@ -223,14 +233,15 @@ end
 n = 5/3
 M = 1.0
 zones = 1000
-T = 30 # Kelvin
+T = 1E10 # Kelvin
 
 G = 6.674E-8 # Gravitational constant in cm^3/g/s^2
 k_B = 1.380649E-16  # erg ⋅ K^-1
 mu = 1.00784
 m_p = 1.6726219E-24 # g
 R_sun = 6.957E10 # solar radius in cm
-M_sun = 1.98847E33
+M_sun = 1.98847E33 # g
+rad_cnst = 7.5646E-15 # erg cm^-3 K^-4
 
 time = [0.0,]
 
