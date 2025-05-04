@@ -1,107 +1,85 @@
-function lane_emden(n::Float64, ξ_max::Float64, h::Float64)
-    # Initial conditions near ξ = 0
-    θ₀ = 1.0
-    y₀ = 0.0
-    ξ₀ = 1e-6
 
-    ξ_vals = [0.0, ξ₀]
-    θ_vals = [θ₀, θ₀]
-    y_vals = [y₀, y₀]
 
-    ξ = ξ₀
-    θ = θ₀
-    y = y₀
+# Function for stellar radius
+function stellar_radius(M::Float64; units::Bool=true)
+    if M < 0.1
+        error("Mass too low for main-sequence approximation (< 0.1 M_sun).")
+    elseif M <= 1.5
+        R = M^0.8
+    elseif M <= 10
+        R = M^0.57
+    else
+        R = M^0.35
+    end
+    return units ? R : R * 6.957e10  # Convert to cm if needed (1 R_sun = 6.957e10 cm)
+end
 
-    # Define RHS of the system: dθ/dξ = y, dy/dξ = -θ^n - (2/ξ)y
-    dθ(ξ, θ, y) = y
-    dy(ξ, θ, y) = (θ > 0 ? -θ^n : 0.0) - (2 / ξ) * y
+# Lane-Emden solver
+function solve_lane_emden(n, xi_max; h=0.001)
+    ε = h
+    ξ = [0.0, ε]
+    θ = [1.0, 1.0 - ε^2/6]
+    ϕ = [0.0, -ε/3]
 
-    while ξ < ξ_max
-        if θ <= 0
-            @warn "θ has become non-positive, stopping integration."
-            break
+    function f(x, θ, ϕ)
+        θ_eff = max(θ, 0.0)
+        dθ = ϕ
+        dϕ = -2/x*ϕ - θ_eff^n
+        return dθ, dϕ
+    end
+
+    while ξ[end] < xi_max && θ[end] > 0
+        x, y, y′ = ξ[end], θ[end], ϕ[end]
+        k1y,  k1y′  = f(x,           y,            y′)
+        k2y,  k2y′  = f(x + h/2,     y + k1y*h/2,   y′ + k1y′*h/2)
+        k3y,  k3y′  = f(x + h/2,     y + k2y*h/2,   y′ + k2y′*h/2)
+        k4y,  k4y′  = f(x + h,       y + k3y*h,     y′ + k3y′*h)
+
+        θ_next = y  + (h/6)*(k1y  + 2k2y  + 2k3y  + k4y)
+        ϕ_next = y′ + (h/6)*(k1y′ + 2k2y′ + 2k3y′ + k4y′)
+        x_next = x + h
+
+        push!(ξ, x_next)
+        push!(θ, θ_next)
+        push!(ϕ, ϕ_next)
+    end
+
+    return ξ, θ, ϕ
+end
+
+# Function to find the first zero
+function first_zero(ξ, θ)
+    for i in 1:length(θ)-1
+        if θ[i] > 0 && θ[i+1] <= 0
+            return ξ[i] - θ[i]*(ξ[i+1]-ξ[i])/(θ[i+1]-θ[i])
         end
-
-        # RK4 integration
-        k1_θ = h * dθ(ξ, θ, y)
-        k1_y = h * dy(ξ, θ, y)
-
-        k2_θ = h * dθ(ξ + h/2, θ + k1_θ/2, y + k1_y/2)
-        k2_y = h * dy(ξ + h/2, θ + k1_θ/2, y + k1_y/2)
-
-        k3_θ = h * dθ(ξ + h/2, θ + k2_θ/2, y + k2_y/2)
-        k3_y = h * dy(ξ + h/2, θ + k2_θ/2, y + k2_y/2)
-
-        k4_θ = h * dθ(ξ + h, θ + k3_θ, y + k3_y)
-        k4_y = h * dy(ξ + h, θ + k3_θ, y + k3_y)
-
-        θ_new = θ + (k1_θ + 2*k2_θ + 2*k3_θ + k4_θ)/6
-        y_new = y + (k1_y + 2*k2_y + 2*k3_y + k4_y)/6
-        ξ += h
-
-        if θ_new < 0
-            break
-        end
-
-        push!(ξ_vals, ξ)
-        push!(θ_vals, θ_new)
-        push!(y_vals, y_new)
-
-        θ = θ_new
-        y = y_new
     end
-
-    return ξ_vals, θ_vals, y_vals
+    return NaN
 end
 
+# Function for generating density profile
+function get_LE_density_profile(n, M)
+    ξ, θ, ϕ = solve_lane_emden(n, 10.0)
+    xi1 = first_zero(ξ, θ)
+    R = stellar_radius(M, units=false)
 
+    alpha = R / xi1
 
+    dtheta_dxi_surface = ϕ[findfirst(t -> t <= 0, θ) - 1]
+    mass_prefactor = -4π * alpha^3 * xi1^2 * dtheta_dxi_surface
+    rho_c = M * M_sun / mass_prefactor
 
-#=
-α = 1 # Scale factor for radius
-ρ_c = 5.7
-n = 1.0#5/3
-R = 6.957E10 # 1 solar radius in cm
-
-# Example usage:
-ξ_vals, θ_vals, y_vals = lane_emden(n, 10.0, 1E-3)
-
-ξ_vals = ξ_vals ./ maximum(ξ_vals)
-# Output radius where θ crosses zero
-iters = length(θ_vals)
-for i in 2:iters
-    if θ_vals[i] < 0
-        println("Approximate surface radius (ξ where θ ≈ 0): ", ξ_vals[i-1])
-        break
+    N = findfirst(t -> t <= 0, θ)
+    if N !== nothing
+        ξ = ξ[1:N]
+        θ = θ[1:N]
+        r = alpha .* ξ
+    else
+        r = alpha .* ξ
     end
+
+    ρ = rho_c .* (max.(θ,0.0) .^ n)
+
+    return r, ρ
 end
 
-radius = α .* ξ_vals .* R 
-density = ρ_c .* θ_vals .^ n
-
-counter = 0
-iters = length(radius)
-for i in 1:iters
-    if density[i] > ρ_c
-        density[i] = ρ_c
-        global counter += 1
-    end
-end
-
-dρ = zeros(iters)
-dρ[1] = 0.0
-dρ[2:end] = diff(density)
-
-density_stiffness = dρ ./ density
-
-using Plots
-#plot(ξ_vals, θ_vals, label="Theta Profile")
-plot(radius[3:end], abs.(density_stiffness[3:end]), label="Density Profile", yscale=:log10)
-#plot(radius, 1e-3 ./ radius, yscale=:log10)
-#plot(radius, density, label="Density Profile")
-#println(length(density))
-#println(radius[end])
-#println(density[end])
-#println(density[2])
-#println(radius[1:10])
-=#
