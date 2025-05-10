@@ -38,6 +38,14 @@ the most basic Finite Difference Methods so this loss is perfectly acceptable, a
 correct implementation of the physics. We want our loss to be at the level of machine precision, such that numerical diffusion
 is as small as possible. 
 
+05/07/2025
+
+    There appears to be an issue in how energy and or temperature is being calculated within the evolution of the polytrope.
+We try evolving this object for 10 steps only, and we find that the temperature goes negative at step 8. This causes the internal
+energy to go negative. Since internal energy is the sum of kinetic and thermal, this value should always be positive. This does 
+not require a check like density, because the value that it goes negative is opposite. Setting this value to 0 would not be
+physical as the central internal energy is non zero at the center of the polytrope.
+
 #=================================================================================================================================#
 
 The following is a listing of the order in progression through which EONS will follow to become AEONS.

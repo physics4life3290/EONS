@@ -11,8 +11,9 @@ function load_snapshots(h5_filename::String)
         snapshot = Dict(
             "radius" => read(group[name]["radius"]),
             "density" => read(group[name]["density"]),
-            #"pressure" => read(group[name]["pressure"]),
-            #"press_grad" => read(group[name]["press_grad"]),
+            "pressure" => read(group[name]["pressure"]),
+            #"temperature" => read(group[name]["temperature"]),
+            #"energy" => read(group[name]["energy"]),
             "velocity" => read(group[name]["velocity"]),
             "gravity" => read(group[name]["gravity"]),
             "grav_accel" => read(group[name]["grav_accel"]),
@@ -68,18 +69,28 @@ function plot_snapshots(snapshots::Dict{Int, Dict}, field::String;
     return plt
 end
 
+R_sun = 6.957E10
+
 # Usage example
-h5_filename = "isothermal_collapse_run.h5"
+h5_filename = "isothermal_collapse/isothermal_collapse_run.h5"
 snapshots = load_snapshots(h5_filename)
 
 # Plot snapshots for different quantities with custom xlims
-p1 = plot_snapshots(snapshots, "density", every=10, title_prefix="Collapse:", log_scale_x=false, log_scale_y=false, xlims=(0.0, R_sun))
-p2 = plot_snapshots(snapshots, "velocity", every=10, title_prefix="Collapse:", xlims=(0.0, R_sun))
-p3 = plot_snapshots(snapshots, "gravity", every=10, title_prefix="Collapse:", xlims=(0.0, R_sun))
-p4 = plot_snapshots(snapshots, "grav_accel", every=10, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p1 = plot_snapshots(snapshots, "density", every=1, title_prefix="Collapse:", log_scale_x=false, log_scale_y=false, xlims=(0.0, R_sun))
+p2 = plot_snapshots(snapshots, "velocity", every=1, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p3 = plot_snapshots(snapshots, "gravity", every=1, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p4 = plot_snapshots(snapshots, "grav_accel", every=1, title_prefix="Collapse:", xlims=(0.0, R_sun))
+p5 = plot_snapshots(snapshots, "pressure", every=1, title_prefix="Collapse:", xlims=(0.0, R_sun))
+#p6 = plot_snapshots(snapshots, "temperature", every=1, title_prefix="Collapse:", xlims=(0.0, R_sun))
+#p7 = plot_snapshots(snapshots, "energy", every=1, title_prefix="Collapse:", log_scale_y = true , xlims=(0.0, R_sun))
 
 # Display the plots
-plot(p1)
-#plot(p2)
+#plot(p1)
+plot(p2)
 #plot(p3)
 #plot(p4)
+#plot(p5)
+#plot(p6)
+#plot(p7)
+
+
