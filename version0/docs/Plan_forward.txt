@@ -1,0 +1,77 @@
+
+
+
+
+
+    In this document, we will discuss the abstract timeline of the physics we would like to add to our simulation.
+We will also discuss what we have, the state of the code, and our potential direction, moving forward. We can start
+with discussing the state of the code.
+
+The State of the Code: 05/02/2025
+
+    As a Most Viable (working) Product, we have coded pressureless free fall. We then added a few tweeks 
+(Lane Emden, interpolation) and modularized the code, bridging in the numerical methods from A.R.C. 
+(Algorithms for Realistic Computation, our other project). From there we produced a data storage protocol and a 
+complementary plotting tool to dissect the file. 
+
+    With a working product, we checked the behavior of our solutions. We saw that as time progressed, density 
+increased at the center of the polytrope and the gravitational well became deeper. The velocity profile remained
+negative, and with rough inspection, one can see that (or even code a plot of) our total energy shows the object
+is bound. These behaviors indicate proper implementation of physics, boundary conditions, and algorithms.
+
+    The next logical step was to add in pressure. Introducing thermal effects at the simplest level by creating
+an isothermal process. We chose an ideal gas equation of state, and programmed the momentum equation to take account
+for these effects. When we allowed the program to evolve our initial model, we saw a discrepancy between the 
+isothermal and pressureless collapse. 
+
+    The isothermal object developed a positive velocity towards the center of the simulation. This shouldnt happen 
+and was indicative of mistreatment of the boundary conditions. We made the repairs to the inner boundary condition for
+both velocity and pressure. This fixed the positive velocity that was developing, however, we now have an Inf that 
+appears two points from the end of our velocity array after one time step. This needs investigation. We will start by 
+looking at the input for the variables in the calculation, there is clearly a division by zero, or the value is being 
+rewritten.  
+
+    With this snag, we decided to take a step back and make sure that the physics within our pressureless free fall
+was sound. We started by checking mass conservation. We saw that with 100 zones, between the first and second time steps that we 
+lost 0.03% of the mass. When we increased our zones to 1000 we saw that we are loosing 0.00129% per step. We are using 
+the most basic Finite Difference Methods so this loss is perfectly acceptable, and its convergence towards stability implies
+correct implementation of the physics. We want our loss to be at the level of machine precision, such that numerical diffusion
+is as small as possible. 
+
+05/07/2025
+
+    There appears to be an issue in how energy and or temperature is being calculated within the evolution of the polytrope.
+We try evolving this object for 10 steps only, and we find that the temperature goes negative at step 8. This causes the internal
+energy to go negative. Since internal energy is the sum of kinetic and thermal, this value should always be positive. This does 
+not require a check like density, because the value that it goes negative is opposite. Setting this value to 0 would not be
+physical as the central internal energy is non zero at the center of the polytrope.
+
+#=================================================================================================================================#
+
+The following is a listing of the order in progression through which EONS will follow to become AEONS.
+
+    i) Pressureless Free Fall Collapse
+    ii) Isothermal Collapse
+    iii) Adiabatic Collapse
+    iv) Advanced Equation of State (i.e. beyond degeneracy)
+    v) Nuclear Reaction Network
+    vi) Reactive Flow Equations
+    vii) Rotation
+    viii) Magnetic Fields
+    ix) Radiation Transport
+    x) Neutrino Transport
+
+    A first wave of these may be "real" others may be approximations set with intention to revisit later (transport...). The size
+of this list, and its order, may change as well. Since the focus is reactive flows in astrophysics, we want all sources of mixing, 
+from collapse itself, to turbulence, to rotation.
+
+#=================================================================================================================================#
+
+The following is a list of the order in progression through which ARC will implement algorithms to keep up with EONS.
+
+    i) Richtmyer Method
+    ii) Godunov's Upwind Scheme
+    iii) Piecewise constant/linear/parabolic
+    iv) WENO
+
+    This list is subject to change as we progress further. 

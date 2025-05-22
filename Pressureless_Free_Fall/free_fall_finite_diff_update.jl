@@ -32,8 +32,9 @@ function update_velocity!(
     v_new = zeros(N)
 
     @inbounds for i in 2:N-1
-        v_new[i-1] = v[i-1] + g[i-1]*Δt - (v[i-1]*Δt)/2Δr * (v[i+1] - v[i-1])
+        v_new[i] = v[i] + g[i]*Δt - (v[i]*Δt/(2Δr)) * (v[i+1] - v[i-1])
     end
-
+    v_new[1] = 0.0 # Boundary condition at the center
+    v_new[N] = 0.0
     return v_new
 end

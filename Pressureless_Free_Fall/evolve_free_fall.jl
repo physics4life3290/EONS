@@ -32,21 +32,21 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, r, dr, t_ff, dt
             dt = 0.5 * dr / vmax
         end
 
-        rho .= update_density!(rho, velocity, r, dt, dr)
-        rho_iters = length(rho)
-        for i in 1:rho_iters
-            if rho[i] < 0.0
-                rho[i] = 0.0
-            end
-        end
-
+        rho, velocity = update_freefall(rho, velocity, r, grav_accel, dt, dr)
+        
+        rho[1] = rho[3]
+        rho[2] = rho[3]
+        #plot(r, velocity, label="Velocity", xlabel="Radius (cm)", ylabel="Velocity (cm/s)", title="Velocity Profile at Step $step", legend=:topright)
+        #rho .= update_density!(rho, velocity, r, dt, dr)
+    
         A, c = build_spherical_poisson_matrix(zones, dr)
         rhs = get_gravity_rhs(zones, rho, c[end]; Φ_out=0.0)
-        
+        println("rho = ", rho)
+        println("rhs = ", rhs)
         gravity = A \ rhs
-        grav_accel = vcat(0.0, -diff(gravity))
+        grav_accel = vcat(0.0, -diff(gravity)/dr)
 
-        velocity .= update_velocity!(velocity, grav_accel, dt, dr)
+        #velocity .= update_velocity!(velocity, grav_accel, dt, dr)
         
         t_ff = sqrt(3π/(32 * G * maximum(rho)))
         push!(ff_timescale, t_ff) 
@@ -68,7 +68,7 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, r, dr, t_ff, dt
         end
 
         # (optional) print progress
-        if step % 100 == 0
+        if step % 1 == 0
             println("Step $step: max(ρ) = ", round(maximum(rho), digits=5), 
                     ", dt = ", round(dt, sigdigits=3),
                     ", total time = ", round(total_time, sigdigits=4))
@@ -79,5 +79,5 @@ function evolve_collapse(rho0, velocity0, gravity0, grav_accel0, r, dr, t_ff, dt
 
     println("Simulation complete. Data saved to: $output_file")
     
-    return  collect(r), rho, velocity, gravity, grav_accel, ff_timescale, dt
+    #return  collect(r), rho, velocity, gravity, grav_accel, ff_timescale, dt
 end
