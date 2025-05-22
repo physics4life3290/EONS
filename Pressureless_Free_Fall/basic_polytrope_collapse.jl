@@ -18,10 +18,10 @@ const M_sun = 1.98847e33   # g
 const R_sun = 6.957e10     # cm
 
 #-- Initial Grid (Physical Units) ------------------------------------------
-zones       = 100
+zones       = 1000
 ghost_zones = 6
 n_polytrope = 5/3
-M_star      = 1.0          # in solar masses
+M_star      = 10.0          # in solar masses
 
 interp_cfg  = setup_interpolation(:cubic_spline, :optimize, false)
 # Initial Quantities
@@ -32,73 +32,92 @@ rho = zeros(iters)
 vel = zeros(iters)
 Φ  = zeros(iters)
 g  = zeros(iters)
-dt = 0.5 * dr / 3e10 #dt0
-t_ff = t_ff0
+dt = 0.5 * dr / dt0
 
-function run_collapse_simulation!(rho0, vel0, g0, dt0, steps, r, dr, zones, G)
-    rho = copy(rho0)
-    vel = copy(vel0)
-    time = [0.0,]
+function run_collapse_simulation!(
+    rho::Vector{Float64},
+    vel::Vector{Float64},
+    g::Vector{Float64},
+    dt::Float64,
+    steps::Int,
+    r::Vector{Float64},
+    dr::Float64,
+    zones::Int,
+    G::Float64
+)
+    # Preallocate working arrays
+    ρ_new = similar(rho)
+    vel_new = similar(vel)
 
-    for time_step in 1:steps
-        for i in 2:zones-1
-            # Continuity equation
-            flux_rho = (rho0[i+1]*vel0[i+1]*r[i+1]^2 - rho0[i-1]*vel0[i-1]*r[i-1]^2) / (2dr)
-            rho[i] = rho0[i] - dt0 * flux_rho / r[i]^2
-            #rho[i] = ((rho0[i+1]+rho0[i-1])/2) - dt0 * flux_rho / r[i]^2
-            rho[i] = max(rho[i], 0.0)
+    # Build and factorize Poisson matrix once
+    A, c = build_spherical_poisson_matrix(zones, dr)
+    factor = lu(A)
 
-            # Momentum equation (update rho*v first)
-            flux_rho_v = (rho0[i+1]*vel0[i+1]^2*r[i+1]^2 - rho0[i-1]*vel0[i-1]^2*r[i-1]^2) / (2dr)
-            rho_v = rho0[i]*vel0[i] - dt0 * flux_rho_v / r[i]^2 + dt0 * rho0[i] * g0[i]
-            #rho_v = (rho0[i+1]*vel0[i+1] + rho0[i-1]*vel0[i-1])/2 - dt0 * flux_rho_v / r[i]^2 + dt0 * rho0[i] * g0[i]
-            if rho[i] == 0.0
-                vel[i] = 0.0
-            else
-                # Update velocity
-                vel[i] = rho_v / rho[i]
-            end
+    t = 0.0
+    t_ff = sqrt(3π / (32G * maximum(rho)))
+    time_history = Float64[]
+
+    for step in 1:steps
+        
+        if t >= t_ff
+            break
         end
 
+        # Continuity and momentum updates
+        @inbounds for i in 2:zones-1
+            # continuity flux
+            fluxρ = (rho[i+1]*vel[i+1]*r[i+1]^2 - rho[i-1]*vel[i-1]*r[i-1]^2) / (2dr)
+            ρ = rho[i] - dt * fluxρ / r[i]^2
+            ρ_new[i] = max(ρ, 0.0)
 
-        rho[1] = rho0[1] - dt0/(dr) * (rho0[2]*vel0[2]*r[2]^2 - rho0[1]*vel0[1]*r[1]^2) / (1000)^2
-        rho[end] = 0.0
-        vel[1] = vel[end] = 0.0
+            # momentum flux
+            fluxρv = (rho[i+1]*vel[i+1]^2*r[i+1]^2 - rho[i-1]*vel[i-1]^2*r[i-1]^2) / (2dr)
+            ρv = rho[i]*vel[i] - dt * fluxρv / r[i]^2 + dt * rho[i] * g[i]
 
-        Coeff_mat, c = build_spherical_poisson_matrix(zones, dr)
-        rhs = get_gravity_rhs(zones, rho, c[end]; Φ_out=0.0)
-        Φ = Coeff_mat \ rhs
-
-        iters = length(r)
-        g = zeros(iters)
-        for i in 2:iters-1
-            g[i] = -(Φ[i+1] - Φ[i-1]) / (2 * dr)
+            vel_new[i] = ρ_new[i] == 0.0 ? 0.0 : ρv / ρ_new[i]
         end
+
+        # BCs
+        r[1] = 100000.0 # cm ~ 1 km
+        ρ_new[1] = rho[1] - dt * (rho[2]*vel[2]*r[2]^2 - rho[1]*vel[1]*r[1]^2) / (dr*r[1]^2)
+        r[1] = 0.0
+        ρ_new[end] = 0.0
+        vel_new[1] = 0.0
+        vel_new[end] = 0.0
+
+        # Update gravity: solve Poisson
+        rhs = get_gravity_rhs(zones, ρ_new, c[end]; Φ_out=0.0)
+        Φ = factor \ rhs
+
         g[1] = 0.0
+        @inbounds for i in 2:zones-1
+            g[i] = -(Φ[i+1] - Φ[i-1]) / (2dr)
+        end
         g[end] = -(Φ[end] - Φ[end-1]) / dr
 
-        dt = 0.5 * dr / maximum(abs.(vel))
-        t_ff = sqrt(3π / (32 * G * maximum(rho)))
-
-        push!(time, dt)
-        rho0 .= rho
-        vel0 .= vel
-        g0 .= g
-        dt0 = 0.5 * dr/ 3E10 #dt
-
+        # Advance time and adapt dt
+        t += dt
+        push!(time_history, t)
+        t_ff = sqrt(3π / (32G * maximum(ρ_new)))
+        dt = 0.5 * dr / maximum(abs.(vel_new))
+        println(t)
+        # Swap arrays
+        rho .= ρ_new
+        vel .= vel_new
     end
 
-    return rho0, vel0, g0, time
+    return rho, vel, g, time_history
 end
 
+
 steps = 100
-rho0, vel0, g0, time = run_collapse_simulation!(rho0, vel0, g0, dt0, steps, r, dr, zones, G)
+rho0, vel0, g0, time = run_collapse_simulation!(rho0, vel0, g0, dt0, steps, collect(r), dr, zones, G)
 
 println(sum(time))
 #plot(r, rho0, label="Density", xlabel="Radius (cm)", ylabel="Density (g/cm^3)", title="Density Profile", legend=:topright)
 r = collect(r)
 r[1] = 1e-10
-rho0_clipped = @. max(rho0, 1e-10)
+rho0_clipped = @. max(rho0, 1e-1)
 
 plot(r, rho0_clipped,
     label = "Density",
